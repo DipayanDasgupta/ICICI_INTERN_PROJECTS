@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+# Virtual Environment
+venv/
+.venv/
+env/
+# IDE / Editor folders
+.vscode/
+.idea/
+*.DS_Store
+# Scrapy specific
+.scrapy/
+# Project-specific generated files
+.env
+*.db
+*.db-journal
+*.log
+google_captcha_pages/
+scraper_run_logs_and_processed_urls/

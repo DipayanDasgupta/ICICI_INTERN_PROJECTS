@@ -1,0 +1,26 @@
+# Flask and Web Server
+Flask
+Werkzeug
+gunicorn
+
+# Data and ML
+pandas
+numpy
+scikit-learn
+lightgbm
+yfinance
+joblib
+tqdm
+
+# Portfolio and Reporting
+PyPortfolioOpt
+QuantStats
+
+# Background Tasks
+celery
+redis
+
+# Caching
+Flask-Caching
+requests
+statsmodels

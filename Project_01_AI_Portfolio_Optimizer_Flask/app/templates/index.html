@@ -1,0 +1,525 @@
+{% extends "base.html" %}
+{% block title %}ML Stock Optimizer Dashboard{% endblock %}
+
+{% block content %}
+<!-- Tab Navigation -->
+<ul class="nav nav-tabs" id="mainTab" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="live-analysis-tab" data-bs-toggle="tab" data-bs-target="#live-analysis-pane" type="button" role="tab" aria-controls="live-analysis-pane" aria-selected="false">Live Analysis</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="portfolio-studio-tab" data-bs-toggle="tab" data-bs-target="#portfolio-studio-pane" type="button" role="tab" aria-controls="portfolio-studio-pane" aria-selected="true">Portfolio Studio</button>
+    </li>
+    <!-- === ADD THIS NEW TAB BUTTON === -->
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="universe-studio-tab" data-bs-toggle="tab" data-bs-target="#universe-studio-pane" type="button" role="tab" aria-controls="universe-studio-pane" aria-selected="false">Universe Studio</button>
+    </li>
+    <!-- === END OF ADDITION === -->
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="backtesting-tab" data-bs-toggle="tab" data-bs-target="#backtesting-pane" type="button" role="tab" aria-controls="backtesting-pane" aria-selected="false">Strategy Backtesting</button>
+    </li>
+</ul>
+
+<!-- Tab Content -->
+<div class="tab-content pt-3" id="mainTabContent">
+    <!-- Live Analysis Pane -->
+    <div class="tab-pane fade" id="live-analysis-pane" role="tabpanel" aria-labelledby="live-analysis-tab">
+        <div class="row">
+            <div class="col-lg-4">
+                <div class="card mb-4">
+                    <div class="card-header">1. Live Analysis Configuration</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="universeSelector" class="form-label">Investment Universe:</label>
+                            <select id="universeSelector" class="form-select">
+                                {% for u in universes %}
+                                <option value="{{ u.value }}">{{ u.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="topNInput" class="form-label">Number of Stocks to Pick:</label>
+                            <input type="number" class="form-control" id="topNInput" value="10" min="5" max="20">
+                        </div>
+                        <div class="mb-3">
+                            <label for="riskFreeInput" class="form-label">Risk-Free Rate (%):</label>
+                            <input type="number" class="form-control" id="riskFreeInput" value="6.0" step="0.1">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Optimization Method:</label>
+                            <div class="form-check"><input class="form-check-input" type="radio" name="optMethod" id="optSharpe" value="sharpe" checked><label class="form-check-label" for="optSharpe">Maximize Sharpe Ratio</label></div>
+                            <div class="form-check"><input class="form-check-input" type="radio" name="optMethod" id="optHRP" value="hrp"><label class="form-check-label" for="optHRP">Hierarchical Risk Parity</label></div>
+                        </div>
+                        <!-- === ADD THIS ENTIRE NEW SECTION === -->
+                        <div id="sectorConstraintsSection" class="mt-3">
+                            <label class="form-label">Sector Constraints (Optional)</label>
+                            <div class="alert alert-info small p-2">
+                                For HRP only. Set min/max % allocation for sectors. Leave blank to let the optimizer decide.
+                            </div>
+                            <div id="sectorConstraintsContainer" class="p-2 border rounded bg-light" style="max-height: 200px; overflow-y: auto;">
+                                <p class="text-muted small">Run analysis once to populate sectors here.</p>
+                            </div>
+                        </div>
+                        <!-- === END OF ADDITION === -->
+                        <button id="runAnalysisBtn" class="btn btn-primary w-100" {% if not model_ready %}disabled{% endif %}>Run Full Analysis</button>
+                        {% if not model_ready %}<p class="text-danger small mt-2">Model not loaded. Run train_and_save_model.py and restart.</p>{% endif %}
+                    </div>
+                </div>
+                <div class="card mb-4">
+                    <div class="card-header">2. Portfolio Rationale (AI Generated)</div>
+                    <div class="card-body" id="rationaleDiv"><p class="text-muted">Run analysis to generate rationale.</p></div>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-header">3. Top Stock Picks & Allocation</div>
+                    <button id="analyzeClustersBtn" class="btn btn-sm btn-outline-primary" style="display: none;" data-bs-toggle="modal" data-bs-target="#clusterAnalysisModal">
+                         Analyze Clusters
+                    </button>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-5"><h5>ML Stock Picks</h5><div id="stockPicksDiv" style="max-height: 350px; overflow-y: auto;"><p class="text-muted">Run analysis for results.</p></div></div>
+                            <div class="col-md-7"><h5>Optimal Portfolio Allocation</h5><div id="portfolioPieChart" style="min-height: 350px;"></div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">4. Multi-Factor Analysis</div>
+                    <div class="card-body"><h5>Sector Exposure</h5><div id="sectorBarChart" style="min-height: 300px;"></div></div>
+                </div>
+                <div class="card mt-4">
+                    <div class="card-header">5. Model Ranking & Feature Importance</div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-7">
+                                <h5>Stock Ranking (Top 50)</h5>
+                                <div id="stockRankingTable" style="max-height: 400px; overflow-y: auto;">
+                                    <p class="text-muted small">Run analysis to see model rankings.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <h5>Feature Importance</h5>
+                                <div id="featureImportanceChart" style="min-height: 400px;">
+                                     <p class="text-muted small">Run analysis to see feature importance.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Portfolio Studio Pane -->
+    <div class="tab-pane fade show active" id="portfolio-studio-pane" role="tabpanel" aria-labelledby="portfolio-studio-tab">
+        <div class="row">
+            <div class="col-lg-5">
+                <div class="card">
+                    <div class="card-header">Create a Custom Portfolio</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="portfolioName" class="form-label">Portfolio Name</label>
+                            <input type="text" class="form-control" id="portfolioName" placeholder="e.g., My Core Holdings">
+                        </div>
+                         <!-- === ADD THIS NEW DROPDOWN === -->
+                        <div class="mb-3">
+                            <label for="studioUniverseSelector" class="form-label">Select Stock Universe</label>
+                            <select id="studioUniverseSelector" class="form-select">
+                                <!-- This uses the same 'universes' variable as the other dropdowns -->
+                                {% for u in universes %}
+                                 <option value="{{ u.value }}">{{ u.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    <!-- === END OF ADDITION === -->
+                        <div class="mb-3">
+                            <label class="form-label">Select Stocks (from selected universe)</label>
+                            <select id="stockSelector" class="form-select" multiple size="10">
+                            </select>
+                            <div class="form-text">Hold Ctrl/Cmd to select multiple stocks.</div>
+                        </div>
+                        <hr>
+                        <h6>Import from CSV</h6>
+                        <div class="input-group mb-3">
+                            <input type="file" class="form-control" id="csvFileInput" accept=".csv">
+                            <button class="btn btn-outline-secondary" type="button" id="importCsvBtn">Import</button>
+                        </div>
+                        <div class="form-text mb-3">CSV format: Two columns with headers "Symbol" and "Weight". Weights should be percentages (e.g., 5.5 for 5.5%).</div>
+                        <hr>
+                        <h6>Weighting Method</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="weightMethod" id="hrpOptimized" value="hrp" checked>
+                            <label class="form-check-label" for="hrpOptimized">Optimize weights with HRP</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="weightMethod" id="manualWeights" value="manual">
+                            <label class="form-check-label" for="manualWeights">Set weights manually</label>
+                        </div>
+                        <div id="manualWeightsContainer" class="mt-3 p-3 border rounded bg-light" style="display:none; max-height: 250px; overflow-y: auto;">
+                        </div>
+                        <button id="savePortfolioBtn" class="btn btn-primary w-100 mt-3">Save Portfolio</button>
+                        <div id="portfolioSaveStatus" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-header">Saved Custom Portfolios</div>
+                    <div id="savedPortfoliosContainer" class="card-body">
+                        <p class="text-muted">Your saved portfolios will appear here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- === ADD THIS ENTIRE NEW TAB PANE === -->
+    <div class="tab-pane fade" id="universe-studio-pane" role="tabpanel" aria-labelledby="universe-studio-tab">
+        <div class="row">
+            <div class="col-lg-5">
+                <div class="card">
+                    <div class="card-header">Upload a Custom Universe</div>
+                    <div class="card-body">
+                        <form id="universeUploadForm">
+                            <div class="mb-3">
+                                <label for="universeName" class="form-label">Universe Name</label>
+                                <input type="text" class="form-control" id="universeName" placeholder="e.g., My EV Watchlist" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="csvUniverseFile" class="form-label">Universe CSV File</label>
+                                <input type="file" class="form-control" id="csvUniverseFile" accept=".csv" required>
+                                <div class="form-text">
+                                    Your CSV must contain a header row with a column named "Symbol".
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Save Universe</button>
+                        </form>
+                        <div id="universeUploadStatus" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-header">Saved Custom Universes</div>
+                    <div id="savedUniversesContainer" class="card-body">
+                        <p class="text-muted">Your saved universes will appear here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- === END OF NEW TAB PANE === -->
+
+    <!-- Backtesting Pane -->
+    <div class="tab-pane fade" id="backtesting-pane" role="tabpanel" aria-labelledby="backtesting-tab">
+        <div class="row">
+            <div class="col-lg-4">
+                <div class="card mb-4">
+                    <div class="card-header">Backtest Configuration</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="backtestTypeSelector" class="form-label">Backtest Type</label>
+                            <select id="backtestTypeSelector" class="form-select">
+                                <option value="ml_strategy">ML-Driven Strategy</option>
+                                <option value="custom">Custom Saved Portfolio</option>
+                            </select>
+                        </div>
+                        <div id="mlStrategyOptions">
+                            <label for="backtestUniverse" class="form-label">Investment Universe:</label>
+                            <select id="backtestUniverse" class="form-select">
+                                {% for u in universes %}
+                                <option value="{{ u.value }}">{{ u.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="alert alert-info small mt-3">
+                                Note: The ML Backtester uses "Number of Stocks to Pick" and "Risk-Free Rate" from the Live Analysis tab.
+                            </div>
+                        </div>
+                        <div id="customPortfolioOptions" style="display:none;">
+                            <label for="customPortfolioSelector" class="form-label">Select Portfolio:</label>
+                            <select id="customPortfolioSelector" class="form-select">
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="customBacktestUniverse" class="form-label">Backtest Universe:</label>
+                            <select id="customBacktestUniverse" class="form-select">
+                                {% for u in universes %}
+                                <option value="{{ u.value }}">{{ u.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text small">The backtest will only include stocks from your portfolio that also exist in this selected universe.</div>
+                        </div>
+                        <div class="mt-3">
+                            <label for="backtestStartDate" class="form-label">Start Date:</label>
+                            <input type="date" class="form-control" id="backtestStartDate" value="2022-01-01">
+                        </div>
+                        <div class="mb-3">
+                            <label for="backtestEndDate" class="form-label">End Date:</label>
+                            <input type="date" class="form-control" id="backtestEndDate" value="{{ current_date }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="backtestOptMethod" class="form-label">Optimization Method:</label>
+                            <select id="backtestOptMethod" class="form-select">
+                                <option value="hrp" selected>Hierarchical Risk Parity (HRP)</option>
+                                <option value="sharpe">Maximize Sharpe Ratio (MPT)</option>
+                            </select>
+                        </div>
+                        <button id="runBacktestBtn" class="btn btn-success w-100">Run Backtest</button>
+                    </div>
+                </div>
+                <div class="card mb-4">
+                    <div class="card-header">Full Metrics Snapshot</div>
+                    <div id="fullMetricsTableContainer" class="card-body table-responsive" style="max-height: 60vh; overflow-y: auto;">
+                        <p class="text-muted small">Run a backtest to see the detailed metrics report.</p>
+                    </div>
+                </div>
+                <div class="card mb-4" id="aiChatbotContainer" style="display: none;">
+                    <div class="card-header">AI Backtest Assistant</div>
+                    <div class="card-body">
+                        <div id="chatDisplay">
+                            <div class="chat-message bot-message">Hello! I'm your AI assistant. After you run a backtest, you can ask me questions about the results.</div>
+                        </div>
+                        <form id="chatForm">
+                            <div class="input-group">
+                                <input type="text" id="chatInput" class="form-control" placeholder="Ask about Sharpe Ratio, Drawdown, etc..." required>
+                                <button class="btn btn-primary" type="submit" id="chatSendBtn">Send</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Backtest Performance Report</span>
+                        <!-- === ADD THIS NEW BUTTON === -->
+                        <button id="showBenchmarkKpiBtn" type="button" class="btn btn-sm btn-outline-secondary me-2" data-bs-toggle="modal" data-bs-target="#benchmarkKpiModal" style="display: none;">
+                            Benchmark KPIs
+                        </button>
+                        <!-- === END OF ADDITION === -->
+                         <!-- === ADD THIS BUTTON === -->
+                        <button id="analyzeClustersBtn" class="btn btn-sm btn-outline-primary" style="display: none;" data-bs-toggle="modal" data-bs-target="#clusterAnalysisModal">
+                            Analyze Clusters
+                        </button>
+                        <!-- === END OF ADDITION === -->
+                        <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#metricsHelpModal">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-circle" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/></svg>
+                            Metric Definitions
+                        </button>
+                    </div>
+                    <div class="card-body" style="min-height: 80vh;">
+                        <div id="backtestStatus" class="text-center p-5">
+                            <p class="text-muted">Configure and run a backtest to see the performance report.</p>
+                        </div>
+                        <div id="backtestResultContainer" style="display: none;">
+                            <h4 class="mb-3">Key Performance Indicators</h4>
+                            <div class="row text-center mb-4 g-3">
+                                <div class="col-lg-3 col-6"><div class="card h-100"><div class="card-body"><h5 id="cagrValue" class="card-title">-</h5><p class="card-text text-muted small">CAGR (%)</p></div></div></div>
+                                <div class="col-lg-3 col-6"><div class="card h-100"><div class="card-body"><h5 id="sharpeValue" class="card-title">-</h5><p class="card-text text-muted small">Sharpe</p></div></div></div>
+                                <div class="col-lg-3 col-6"><div class="card h-100"><div class="card-body"><h5 id="drawdownValue" class="card-title">-</h5><p class="card-text text-muted small">Max Drawdown (%)</p></div></div></div>
+                                <div class="col-lg-3 col-6"><div class="card h-100"><div class="card-body"><h5 id="calmarValue" class="card-title">-</h5><p class="card-text text-muted small">Calmar</p></div></div></div>
+                                <div class="col-lg-3 col-6"><div class="card h-100"><div class="card-body"><h5 id="betaValue" class="card-title">-</h5><p class="card-text text-muted small">Beta</p></div></div></div>
+                                <div class="col-lg-3 col-6"><div class="card h-100"><div class="card-body"><h5 id="sortinoValue" class="card-title">-</h5><p class="card-text text-muted small">Sortino</p></div></div></div>
+                                <div class="col-lg-3 col-6"><div class="card h-100"><div class="card-body"><h5 id="varValue" class="card-title">-</h5><p class="card-text text-muted small">Daily VaR</p></div></div></div>
+                                <div class="col-lg-3 col-6"><div class="card h-100"><div class="card-body"><h5 id="cvarValue" class="card-title">-</h5><p class="card-text text-muted small">Daily CVaR</p></div></div></div>
+                            </div>
+                            <hr class="my-4">
+                            <h4 class="mb-3 mt-4">Performance Charts</h4>
+                            <div id="backtestEquityChart" style="min-height: 400px;"></div>
+                            <div id="backtestDrawdownChart" class="mt-4" style="min-height: 250px;"></div>
+                            <hr class="my-4">
+                            <h4 class="mb-3 mt-4">Historical Allocation</h4>
+                            <div id="historicalWeightsChart" style="min-height: 400px;"></div>
+                            <h4 class="mb-3 mt-4 d-flex align-items-center">
+                                <span>Historical Sector Exposure (%)</span>
+                                <button id="showSectorBoxplotBtn" class="btn btn-sm btn-outline-primary ms-3" title="Show Allocation Distribution">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-reception-4" viewBox="0 0 16 16">
+                                        <path d="M0 11.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2zM4 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-3zM8 7.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-6zm4 3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-3z"/>
+                                    </svg>
+                                    Show Distribution
+                                </button>
+                            </h4>
+                            <div id="historicalSectorsChart" class="mt-4" style="min-height: 400px;"></div>
+                            <hr class="my-4">
+                            <h4 class="mb-3 mt-4">Returns Analysis</h4>
+                            <div class="row">
+                                <div class="col-lg-8">
+                                    <h5>Monthly Returns (%)</h5>
+                                    <div id="monthlyReturnsTable" class="table-responsive small"></div>
+                                </div>
+                                <div class="col-lg-4">
+                                    <h5>Yearly Returns (%)</h5>
+                                    <div id="yearlyReturnsTable" class="table-responsive"></div>
+                                </div>
+                            </div>
+                            <hr class="my-4">
+                            <h4 class="mb-3 mt-4 d-flex align-items-center">
+                                Factor Exposure Analysis
+                                <a href="#" id="explainFactorsBtn" class="ms-2 text-info">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-robot" viewBox="0 0 16 16"><path d="M6 12.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5ZM3 8.062C3 6.76 4.235 5.765 5.53 5.886a26.58 26.58 0 0 0 4.94 0C11.765 5.765 13 6.76 13 8.062v1.157a.933.933 0 0 1-.765.935c-.845.147-2.34.346-4.235.346-1.895 0-3.39-.2-4.235-.346A.933.933 0 0 1 3 9.219V8.062Zm4.542-.827a.25.25 0 0 0 .217.066l.063-.008a.25.25 0 0 0 .217-.066c.062-.058.109-.137.109-.224v-.45a.25.25 0 0 0-.25-.25h-.17a.25.25 0 0 0-.25.25v.45c0 .087.047.166.109.224Z"/><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1ZM1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0Z"/></svg>
+                                </a>
+                                <button id="showFactorBoxplotBtn" class="btn btn-sm btn-outline-primary ms-2" title="Show Factor Exposure Distribution">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-reception-4" viewBox="0 0 16 16"><path d="M0 11.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2zM4 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-3zM8 7.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-6zm4 3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-3z"/></svg>
+                                </button>
+                            </h4>
+                            <div id="factorExplanationContainer" class="alert alert-info" style="display:none;"></div>
+                            <div class="row">
+                                <div class="col-lg-7">
+                                    <div id="factorExposureChart" style="min-height: 350px;"></div>
+                                </div>
+                                <div class="col-lg-5">
+                                    <p class="text-muted small">This analysis decomposes the portfolio's returns into contributions from common risk factors. The Betas (bars) show the portfolio's sensitivity to each factor. A statistically significant Alpha (p-value < 0.05) suggests performance not explained by these factors.</p>
+                                    <div id="factorExposureTable" class="table-responsive small"></div>
+                                </div>
+                            </div>
+                            <hr class="my-4">
+                            <div class="d-flex justify-content-between align-items-center mt-4">
+                                <h4 class="mb-0">Rebalancing Log</h4>
+                                <div>
+                                    <button id="downloadPdfBtn" class="btn btn-sm btn-danger me-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-pdf" viewBox="0 0 16 16"><path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/><path d="M4.603 14.087a.81.81 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.68 7.68 0 0 1 1.482-.645 19.697 19.697 0 0 0 1.062-2.227 7.269 7.269 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.12h.007a.702.702 0 0 1 .488.26.87.87 0 0 1 .287.498.92.92 0 0 1-.088.484c-.09.15-.254.296-.44.408a.61.61 0 0 1-.394.134c-.114.007-.227-.012-.317-.054a.6.6 0 0 1-.252-.192c-.068-.092-.099-.204-.076-.313.023-.106.09-.196.23-.255.126-.053.275-.07.43-.052.143.018.283.078.388.172.12.11.187.258.196.412.01.15-.028.302-.102.433-.074.133-.203.236-.355.299a.64.64 0 0 1-.43.078c-.234-.008-.435-.116-.58-.277-.14-.15-.2-.333-.186-.512.013-.15.088-.293.208-.402.118-.106.27-.163.43-.163.153 0 .293.046.402.122.11.075.188.186.21.315.023.135.008.274-.04.403-.048.13-.12.24-.22.326a.6.6 0 0 1-.41.133c-.12.007-.235-.012-.326-.053a.6.6 0 0 1-.255-.192c-.068-.092-.099-.203-.075-.313.023-.106.09-.196.23-.255.126-.053.275-.07.43-.052.155.02.302.09.41.192.106.1.166.238.172.382.006.14-.027.27-.09.388a.65.65 0 0 1-.352.29c-.14.062-.295.093-.46.093a.81.81 0 0 1-.438-.115.82.82 0 0 1-.3-.28c-.145-.252-.2-.53-.186-.82.013-.27.09-.523.238-.732.135-.19.33-.35.56-.46.238-.11.49-.16.75-.16.254 0 .504.05.742.15.24.098.446.248.6.448.15.2.24.45.24.7s-.09.5-.24.7a.85.85 0 0 1-.6.448c-.24.098-.496.146-.742.146a.87.87 0 0 1-.498-.15c-.19-.116-.33-.29-.408-.508a.83.83 0 0 1-.023-.424c.006-.11.04-.216.11-.304.07-.09.16-.16.27-.2.11-.04.23-.06.35-.06.123 0 .243.02.353.06.11.04.207.1.287.18.08.08.14.17.18.27.04.1.06.21.06.32s-.02.22-.06.32a.5.5 0 0 1-.18.28c-.08.08-.18.14-.28.18a.5.5 0 0 1-.32.06c-.11 0-.22-.02-.32-.06a.5.5 0 0 1-.28-.18.5.5 0 0 1-.18-.28.49.49 0 0 1-.06-.32z"/></svg>
+                                        Download PDF
+                                    </button>
+                                    <button id="downloadCsvBtn" class="btn btn-sm btn-outline-secondary">Download as CSV</button>
+                                </div>
+                            </div>
+                            <div id="rebalanceLogContainer" class="table-responsive small mt-3" style="max-height: 400px;"></div>
+                            <hr class="my-4">
+                            <h4 class="mb-3 mt-4">AI-Powered Analysis</h4>
+                            <div id="aiReportContainer" class="card card-body bg-light">
+                                <p class="text-muted small">Run a backtest to generate an AI-powered analysis of the results.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Metrics Help Modal -->
+<div class="modal fade" id="metricsHelpModal" tabindex="-1" aria-labelledby="metricsHelpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="metricsHelpModalLabel">Performance Metric Definitions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <dl>
+                    <dt>CAGR (Compound Annual Growth Rate)</dt>
+                    <dd>The average annual growth rate of an investment over a specified period longer than one year.</dd>
+                    <dt>Sharpe Ratio</dt>
+                    <dd>Measures the performance of an investment compared to a risk-free asset, after adjusting for its risk. A higher Sharpe Ratio is better. It answers the question: "How much excess return am I getting for the extra volatility I'm holding?"</dd>
+                    <dt>Max Drawdown</dt>
+                    <dd>The maximum observed loss from a peak to a trough of a portfolio, before a new peak is attained. It's an indicator of the worst-case loss scenario during the backtest.</dd>
+                    <dt>Sortino Ratio</dt>
+                    <dd>Similar to the Sharpe Ratio, but it only penalizes for "bad" volatility (downside deviation), not "good" volatility (upside swings). It is often more relevant for investors who are primarily concerned with downside risk.</dd>
+                    <dt>Calmar Ratio</dt>
+                    <dd>Measures risk-adjusted return based on the Max Drawdown. It is calculated as CAGR divided by the absolute value of the Max Drawdown. A higher Calmar is better.</dd>
+                    <dt>Beta</dt>
+                    <dd>A measure of a portfolio's volatility, or systematic risk, in comparison to the market as a whole (the benchmark). A Beta of 1 indicates the portfolio moves with the market. Beta < 1 is less volatile; Beta > 1 is more volatile.</dd>
+                    <dt>Alpha (from Factor Analysis)</dt>
+                    <dd>The excess return of the portfolio relative to the return of a benchmark index, after adjusting for its risk exposure (betas) to known market factors. A positive, statistically significant Alpha suggests the strategy has generated returns not explained by exposure to common risks.</dd>
+                    <dt>R-Squared (from Factor Analysis)</dt>
+                    <dd>Represents the percentage of a portfolio's returns that can be explained by movements in the benchmark/factors. An R-squared of 75% means that 75% of the portfolio's price movements are explained by the factors in the model.</dd>
+                </dl>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sector Boxplot Modal -->
+<div class="modal fade" id="sectorBoxplotModal" tabindex="-1" aria-labelledby="sectorBoxplotModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sectorBoxplotModalLabel">Historical Sector Allocation Distribution</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">This box plot shows the distribution of weights for each sector over the entire backtest period. It helps to understand the consistency and range of your allocations. A tight box indicates a stable allocation, while a tall box indicates high variability.</p>
+                <div id="sectorBoxplotChart" style="min-height: 60vh;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Factor Exposure Boxplot Modal -->
+<div class="modal fade" id="factorBoxplotModal" tabindex="-1" aria-labelledby="factorBoxplotModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="factorBoxplotModalLabel">Historical Factor Beta Distribution (1-Year Rolling)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">This chart shows the distribution of the strategy's sensitivity (Beta) to different market factors over time. A tight box indicates a stable exposure, while a tall box shows that the strategy's risk profile changed significantly during the backtest.</p>
+                <div id="factorBoxplotChart" style="min-height: 60vh;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="benchmarkKpiModal" tabindex="-1" aria-labelledby="benchmarkKpiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="benchmarkKpiModalLabel">NIFTY 50 Benchmark KPIs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">These are the performance metrics for a buy-and-hold strategy on the NIFTY 50 index over the same backtest period.</p>
+                <div id="benchmarkKpiContainer" class="table-responsive">
+                    <!-- KPIs will be injected here by JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- In app/templates/index.html, at the end of the file -->
+
+<!-- In app/templates/index.html -->
+
+<!-- Cluster Analysis Modal -->
+<div class="modal fade" id="clusterAnalysisModal" tabindex="-1" aria-labelledby="clusterAnalysisModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="clusterAnalysisModalLabel">Portfolio Cluster Analysis</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- THIS IS THE NEW STRUCTURE -->
+                <div id="clusterAnalysisContent" class="row">
+                    <div class="col-lg-7">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                Stock Correlation Dendrogram
+                            </div>
+                            <div class="card-body">
+                                <div id="clusterDendrogramChart" style="min-height: 600px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                AI Analysis
+                            </div>
+                            <div id="clusterAiReport" class="card-body">
+                                <!-- AI Report will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

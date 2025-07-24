@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+# Virtual Environment
+venv/
+.venv/
+env/
+# IDE / Editor folders
+.vscode/
+.idea/
+*.DS_Store
+# Project-specific generated files
+app/stock_selector_model.joblib
+*.db
+*.sqlite3
+celerybeat-schedule
+*.log
+standalone_backtest_report.html
